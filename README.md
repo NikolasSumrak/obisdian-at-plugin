@@ -31,51 +31,35 @@ Example: `ddd, MMM DD YYYY` renders as `Tue, Mar 17 2026`
 
 ## Installation
 
-### Manual install
+### From release (recommended)
 
-1. Build the plugin (or use the pre-built files from `build/`):
+1. Download `main.js`, `manifest.json`, and `styles.css` from the [latest release](https://github.com/NikolasSumrak/obisdian-at-plugin/releases/latest)
+2. In your vault folder, create directory `.obsidian/plugins/at-symbol-inserter/`
+3. Move the downloaded files into that directory
+4. Open Obsidian → **Settings → Community plugins** → enable **At Inserter**
+
+### Build from source
+
+1. Clone the repo and build:
    ```bash
-   npm install
-   npm run build
+   git clone https://github.com/NikolasSumrak/obisdian-at-plugin.git
+   cd obisdian-at-plugin
+   npm install && npm run build
    ```
 
-2. In your Obsidian vault folder, create the plugin directory:
-   ```
-   <your-vault>/.obsidian/plugins/at-symbol-inserter/
-   ```
-
-3. Copy three files from `build/` into that directory:
-   ```
-   main.js
-   manifest.json
-   styles.css
+2. Copy the built files to your vault:
+   ```bash
+   mkdir -p "/path/to/your-vault/.obsidian/plugins/at-symbol-inserter"
+   cp build/main.js build/manifest.json build/styles.css \
+      "/path/to/your-vault/.obsidian/plugins/at-symbol-inserter/"
    ```
 
-4. Open Obsidian, go to **Settings > Community plugins**, and enable **At Inserter**.
-
-### Step by step (terminal)
-
-```bash
-# 1. Build
-cd /path/to/Obsidian-At-Plugin
-npm install && npm run build
-
-# 2. Create plugin folder in your vault
-mkdir -p "/path/to/your-vault/.obsidian/plugins/at-symbol-inserter"
-
-# 3. Copy files
-cp build/main.js build/manifest.json build/styles.css \
-   "/path/to/your-vault/.obsidian/plugins/at-symbol-inserter/"
-```
-
-Replace `/path/to/your-vault` with the actual path to your Obsidian vault folder.
+3. Open Obsidian → **Settings → Community plugins** → enable **At Inserter**
 
 ### For development (symlink)
 
-If you want live-reload during development, symlink the `build/` directory:
-
 ```bash
-ln -s /path/to/Obsidian-At-Plugin/build \
+ln -s /path/to/obisdian-at-plugin/build \
    "/path/to/your-vault/.obsidian/plugins/at-symbol-inserter"
 ```
 
