@@ -1,7 +1,7 @@
 {
-	"name": "obsidian-sample-plugin",
+	"name": "obsidian-at-inserter",
 	"version": "1.0.0",
-	"description": "This is a sample plugin for Obsidian (https://obsidian.md)",
+	"description": "Type @ to open a context menu for quick insertions in Obsidian",
 	"main": "main.js",
 	"type": "module",
 	"scripts": {

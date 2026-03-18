@@ -1,8 +1,56 @@
-/*
+.at-date-suggestion {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	padding: 2px 0;
+}
 
-This CSS file will be included with your plugin, and
-available in the app when your plugin is enabled.
+.at-date-label {
+	font-weight: 500;
+}
 
-If your plugin does not need CSS, delete this file.
+.at-date-value {
+	font-size: 0.85em;
+	color: var(--text-muted);
+	background: var(--background-modifier-hover);
+	padding: 1px 6px;
+	border-radius: 4px;
+}
 
-*/
+.at-date-highlight {
+	background: var(--background-secondary);
+	border-radius: 10px;
+	padding: 2px 8px;
+	font-size: 0.9em;
+	color: var(--text-normal);
+	border: 1px solid var(--background-modifier-border);
+	cursor: pointer;
+}
+
+.at-date-highlight:hover {
+	background: var(--background-modifier-hover);
+	border-color: var(--interactive-accent);
+}
+
+.at-date-picker-popup {
+	background: var(--background-primary);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 6px;
+	padding: 4px;
+	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.at-date-picker-popup input[type="date"] {
+	background: var(--background-primary);
+	color: var(--text-normal);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 4px;
+	padding: 4px 8px;
+	font-size: 14px;
+	outline: none;
+}
+
+.at-date-picker-popup input[type="date"]:focus {
+	border-color: var(--interactive-accent);
+}

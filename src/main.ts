@@ -1,99 +1,316 @@
-import {App, Editor, MarkdownView, Modal, Notice, Plugin} from 'obsidian';
-import {DEFAULT_SETTINGS, MyPluginSettings, SampleSettingTab} from "./settings";
+import { App, Editor, EditorPosition, EditorSuggest, EditorSuggestContext, EditorSuggestTriggerInfo, Plugin, PluginSettingTab, Setting, TFile } from 'obsidian';
+import { ViewPlugin, ViewUpdate, Decoration, DecorationSet, EditorView, MatchDecorator, WidgetType } from '@codemirror/view';
+import { Extension } from '@codemirror/state';
 
-// Remember to rename these classes and interfaces!
+interface AtInserterSettings {
+	triggerSymbol: string;
+	displayDateFormat: string;
+	highlightDates: boolean;
+}
 
-export default class MyPlugin extends Plugin {
-	settings: MyPluginSettings;
+const DEFAULT_SETTINGS: AtInserterSettings = {
+	triggerSymbol: '@',
+	displayDateFormat: 'YYYY-MM-DD',
+	highlightDates: true,
+};
+
+interface DateOption {
+	label: string;
+	getDate: () => string;
+	getRawDate: () => Date;
+}
+
+const DATE_OPTIONS: DateOption[] = [
+	{
+		label: 'Today',
+		getDate: () => {
+			const d = new Date();
+			return formatDate(d);
+		},
+		getRawDate: () => new Date(),
+	},
+	{
+		label: 'Tomorrow',
+		getDate: () => {
+			const d = new Date();
+			d.setDate(d.getDate() + 1);
+			return formatDate(d);
+		},
+		getRawDate: () => {
+			const d = new Date();
+			d.setDate(d.getDate() + 1);
+			return d;
+		},
+	},
+];
+
+function formatDate(d: Date): string {
+	const year = d.getFullYear();
+	const month = String(d.getMonth() + 1).padStart(2, '0');
+	const day = String(d.getDate()).padStart(2, '0');
+	return `${year}-${month}-${day}`;
+}
+
+function formatDateDisplay(d: Date, fmt: string): string {
+	const MONTH_NAMES_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+	const MONTH_NAMES_FULL = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+	const DAY_NAMES_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+	const DAY_NAMES_FULL = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+	const year = String(d.getFullYear());
+	const month = String(d.getMonth() + 1).padStart(2, '0');
+	const day = String(d.getDate()).padStart(2, '0');
+
+	let result = fmt;
+	result = result.replace('YYYY', year);
+	result = result.replace('MMMM', MONTH_NAMES_FULL[d.getMonth()] ?? '');
+	result = result.replace('MMM', MONTH_NAMES_SHORT[d.getMonth()] ?? '');
+	result = result.replace('MM', month);
+	result = result.replace('DD', day);
+	result = result.replace('dddd', DAY_NAMES_FULL[d.getDay()] ?? '');
+	result = result.replace('ddd', DAY_NAMES_SHORT[d.getDay()] ?? '');
+
+	return result;
+}
+
+function escapeRegex(s: string): string {
+	return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+class DateSuggest extends EditorSuggest<DateOption> {
+	plugin: AtInserterPlugin;
+
+	constructor(plugin: AtInserterPlugin) {
+		super(plugin.app);
+		this.plugin = plugin;
+	}
+
+	onTrigger(cursor: EditorPosition, editor: Editor, file: TFile | null): EditorSuggestTriggerInfo | null {
+		const line = editor.getLine(cursor.line);
+		const sub = line.substring(0, cursor.ch);
+		const symbol = escapeRegex(this.plugin.settings.triggerSymbol);
+		const match = sub.match(new RegExp(symbol + '(\\w*)$'));
+		if (!match) return null;
+
+		return {
+			start: { line: cursor.line, ch: cursor.ch - match[0].length },
+			end: cursor,
+			query: match[1] ?? '',
+		};
+	}
+
+	getSuggestions(context: EditorSuggestContext): DateOption[] {
+		const query = context.query.toLowerCase();
+		return DATE_OPTIONS.filter(opt => opt.label.toLowerCase().includes(query));
+	}
+
+	renderSuggestion(option: DateOption, el: HTMLElement): void {
+		const container = el.createDiv({ cls: 'at-date-suggestion' });
+		container.createSpan({ text: option.label, cls: 'at-date-label' });
+		container.createSpan({ text: formatDateDisplay(option.getRawDate(), this.plugin.settings.displayDateFormat), cls: 'at-date-value' });
+	}
+
+	selectSuggestion(option: DateOption, evt: MouseEvent | KeyboardEvent): void {
+		if (!this.context) return;
+
+		const { editor, start, end } = this.context;
+		const dateStr = option.getDate();
+		editor.replaceRange(dateStr, start, end);
+	}
+}
+
+class DateWidget extends WidgetType {
+	constructor(readonly rawDate: string, readonly format: string) {
+		super();
+	}
+
+	eq(other: DateWidget): boolean {
+		return this.rawDate === other.rawDate && this.format === other.format;
+	}
+
+	toDOM(): HTMLElement {
+		const span = document.createElement('span');
+		span.className = 'at-date-highlight';
+		span.setAttribute('data-date', this.rawDate);
+		const [yearStr, monthStr, dayStr] = this.rawDate.split('-');
+		const d = new Date(Number(yearStr), Number(monthStr) - 1, Number(dayStr));
+		span.textContent = formatDateDisplay(d, this.format);
+		return span;
+	}
+
+	ignoreEvent(): boolean {
+		return false;
+	}
+}
+
+function showDatePicker(target: HTMLElement, view: EditorView) {
+	const existing = document.querySelector('.at-date-picker-popup');
+	if (existing) existing.remove();
+
+	const rawDate = target.getAttribute('data-date');
+	if (!rawDate) return;
+
+	const pos = view.posAtDOM(target);
+	const dateLen = 10; // YYYY-MM-DD
+
+	const popup = document.createElement('div');
+	popup.className = 'at-date-picker-popup';
+
+	const input = document.createElement('input');
+	input.type = 'date';
+	input.value = rawDate;
+	popup.appendChild(input);
+
+	const rect = target.getBoundingClientRect();
+	popup.style.position = 'fixed';
+	popup.style.left = `${rect.left}px`;
+	popup.style.top = `${rect.bottom + 4}px`;
+	popup.style.zIndex = '1000';
+
+	document.body.appendChild(popup);
+	input.focus();
+	input.showPicker();
+
+	const cleanup = () => {
+		popup.remove();
+		document.removeEventListener('mousedown', onClickOutside);
+	};
+
+	const onClickOutside = (e: MouseEvent) => {
+		if (!popup.contains(e.target as Node)) cleanup();
+	};
+
+	input.addEventListener('change', () => {
+		const newDate = input.value;
+		if (newDate && newDate !== rawDate) {
+			view.dispatch({
+				changes: { from: pos, to: pos + dateLen, insert: newDate },
+			});
+		}
+		cleanup();
+	});
+
+	setTimeout(() => document.addEventListener('mousedown', onClickOutside), 0);
+}
+
+function isSourceMode(view: EditorView): boolean {
+	return view.dom.closest('.is-source-mode.mod-cm6') !== null
+		&& view.dom.closest('.is-live-preview') === null;
+}
+
+function createDateHighlightPlugin(format: string) {
+	const decorator = new MatchDecorator({
+		regexp: /\b\d{4}-\d{2}-\d{2}\b/g,
+		decoration: (match) => Decoration.replace({
+			widget: new DateWidget(match[0], format),
+		}),
+	});
+
+	return ViewPlugin.fromClass(
+		class {
+			decorations: DecorationSet;
+
+			constructor(view: EditorView) {
+				this.decorations = isSourceMode(view) ? Decoration.none : decorator.createDeco(view);
+			}
+
+			update(update: ViewUpdate) {
+				if (isSourceMode(update.view)) {
+					this.decorations = Decoration.none;
+				} else {
+					this.decorations = decorator.updateDeco(update, this.decorations);
+				}
+			}
+		},
+		{
+			decorations: (v) => v.decorations,
+			eventHandlers: {
+				click: (e: MouseEvent, view: EditorView) => {
+					const target = (e.target as HTMLElement).closest('.at-date-highlight') as HTMLElement | null;
+					if (target) {
+						e.preventDefault();
+						showDatePicker(target, view);
+						return true;
+					}
+					return false;
+				},
+			},
+		}
+	);
+}
+
+class AtInserterSettingTab extends PluginSettingTab {
+	plugin: AtInserterPlugin;
+
+	constructor(app: App, plugin: AtInserterPlugin) {
+		super(app, plugin);
+		this.plugin = plugin;
+	}
+
+	display(): void {
+		const { containerEl } = this;
+		containerEl.empty();
+
+		new Setting(containerEl)
+			.setName('Trigger symbol')
+			.setDesc('Character that triggers the insertion menu (default: @)')
+			.addText(text => text
+				.setPlaceholder('@')
+				.setValue(this.plugin.settings.triggerSymbol)
+				.onChange(async (value) => {
+					this.plugin.settings.triggerSymbol = value || '@';
+					await this.plugin.saveSettings();
+				}));
+
+		new Setting(containerEl)
+			.setName('Display date format')
+			.setDesc('Format for dates shown in the suggestion popup (e.g. YYYY-MM-DD, DD/MM/YYYY, MMM DD YYYY). Inserted date is always YYYY-MM-DD.')
+			.addText(text => text
+				.setPlaceholder('YYYY-MM-DD')
+				.setValue(this.plugin.settings.displayDateFormat)
+				.onChange(async (value) => {
+					this.plugin.settings.displayDateFormat = value || 'YYYY-MM-DD';
+					await this.plugin.saveSettings();
+				}));
+
+		new Setting(containerEl)
+			.setName('Highlight dates')
+			.setDesc('Render YYYY-MM-DD dates as highlighted pills in the editor')
+			.addToggle(toggle => toggle
+				.setValue(this.plugin.settings.highlightDates)
+				.onChange(async (value) => {
+					this.plugin.settings.highlightDates = value;
+					await this.plugin.saveSettings();
+				}));
+	}
+}
+
+export default class AtInserterPlugin extends Plugin {
+	settings: AtInserterSettings;
+	dateHighlightExt: Extension[] = [];
 
 	async onload() {
 		await this.loadSettings();
-
-		// This creates an icon in the left ribbon.
-		this.addRibbonIcon('dice', 'Sample', (evt: MouseEvent) => {
-			// Called when the user clicks the icon.
-			new Notice('This is a notice!');
-		});
-
-		// This adds a status bar item to the bottom of the app. Does not work on mobile apps.
-		const statusBarItemEl = this.addStatusBarItem();
-		statusBarItemEl.setText('Status bar text');
-
-		// This adds a simple command that can be triggered anywhere
-		this.addCommand({
-			id: 'open-modal-simple',
-			name: 'Open modal (simple)',
-			callback: () => {
-				new SampleModal(this.app).open();
-			}
-		});
-		// This adds an editor command that can perform some operation on the current editor instance
-		this.addCommand({
-			id: 'replace-selected',
-			name: 'Replace selected content',
-			editorCallback: (editor: Editor, view: MarkdownView) => {
-				editor.replaceSelection('Sample editor command');
-			}
-		});
-		// This adds a complex command that can check whether the current state of the app allows execution of the command
-		this.addCommand({
-			id: 'open-modal-complex',
-			name: 'Open modal (complex)',
-			checkCallback: (checking: boolean) => {
-				// Conditions to check
-				const markdownView = this.app.workspace.getActiveViewOfType(MarkdownView);
-				if (markdownView) {
-					// If checking is true, we're simply "checking" if the command can be run.
-					// If checking is false, then we want to actually perform the operation.
-					if (!checking) {
-						new SampleModal(this.app).open();
-					}
-
-					// This command will only show up in Command Palette when the check function returns true
-					return true;
-				}
-				return false;
-			}
-		});
-
-		// This adds a settings tab so the user can configure various aspects of the plugin
-		this.addSettingTab(new SampleSettingTab(this.app, this));
-
-		// If the plugin hooks up any global DOM events (on parts of the app that doesn't belong to this plugin)
-		// Using this function will automatically remove the event listener when this plugin is disabled.
-		this.registerDomEvent(document, 'click', (evt: MouseEvent) => {
-			new Notice("Click");
-		});
-
-		// When registering intervals, this function will automatically clear the interval when the plugin is disabled.
-		this.registerInterval(window.setInterval(() => console.log('setInterval'), 5 * 60 * 1000));
-
+		this.registerEditorSuggest(new DateSuggest(this));
+		this.registerEditorExtension(this.dateHighlightExt);
+		this.updateDateHighlight();
+		this.addSettingTab(new AtInserterSettingTab(this.app, this));
 	}
 
-	onunload() {
+	updateDateHighlight() {
+		this.dateHighlightExt.length = 0;
+		if (this.settings.highlightDates) {
+			this.dateHighlightExt.push(createDateHighlightPlugin(this.settings.displayDateFormat));
+		}
+		this.app.workspace.updateOptions();
 	}
 
 	async loadSettings() {
-		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData() as Partial<MyPluginSettings>);
+		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData() as Partial<AtInserterSettings>);
 	}
 
 	async saveSettings() {
 		await this.saveData(this.settings);
-	}
-}
-
-class SampleModal extends Modal {
-	constructor(app: App) {
-		super(app);
-	}
-
-	onOpen() {
-		let {contentEl} = this;
-		contentEl.setText('Woah!');
-	}
-
-	onClose() {
-		const {contentEl} = this;
-		contentEl.empty();
+		this.updateDateHighlight();
 	}
 }
