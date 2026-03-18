@@ -2,6 +2,10 @@
 
 Type `@` in the editor to open a context menu for quick date insertion. Dates are displayed as styled pills with a configurable format, and clicking a pill opens a date picker to change the value.
 
+## Demo
+
+![Demo](demo.gif)
+
 ## Features
 
 - **@ trigger** — type `@` to open a suggestion popup with date options (Today, Tomorrow)
