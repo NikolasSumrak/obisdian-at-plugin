@@ -3,15 +3,21 @@
 ## Overview
 An Obsidian plugin that shows a context menu when typing `@` (configurable) in the editor. Currently supports date insertion (Today/Tomorrow), designed to be expanded with other insertion types.
 
+## Repo
+- **GitHub**: `NikolasSumrak/obisdian-at-plugin`
+- **Plugin ID**: `at-symbol-inserter`
+- **Author**: NikolasSumrak
+
 ## Architecture
 - **Trigger**: Configurable symbol (default `@`) opens an `EditorSuggest` popup with filterable options
-- **Date highlighting**: CodeMirror 6 `ViewPlugin` with `MatchDecorator` highlights YYYY-MM-DD dates as pills in the editor
-- **Settings**: `AtInserterSettings` with configurable trigger symbol via settings tab
-- **Extensible**: The suggest system is designed to support multiple option types beyond dates
+- **Date pills**: CM6 `ViewPlugin` + `MatchDecorator` with `Decoration.replace` widget — visually replaces `YYYY-MM-DD` with formatted pill (e.g., `Mar 17, 2026`), raw text unchanged
+- **Date picker**: Clicking a pill opens native `<input type="date">`, selection updates the document via CM6 transaction
+- **Source mode**: Decorations disabled in source mode (`isSourceMode()` check), only active in Live Preview
+- **Settings**: `AtInserterSettings` — trigger symbol, display date format, highlight toggle. Mutable extension array pattern for live toggle of CM6 decorations.
 
 ## Key Files
-- `src/main.ts` — Plugin entry point, `EditorSuggest` for trigger, CM6 date highlighting, settings tab
-- `styles.css` — Suggestion popup styling and date pill styles
+- `src/main.ts` — All plugin logic: `EditorSuggest`, `DateWidget`, `createDateHighlightPlugin()`, `showDatePicker()`, settings tab
+- `styles.css` — Suggestion popup, date pill, hover effect, date picker popup styles
 - `manifest.json` — Plugin metadata (id: `at-symbol-inserter`)
 - `esbuild.config.mjs` — Build config; outputs to `build/`, copies manifest.json + styles.css there
 
@@ -25,26 +31,31 @@ npm run build      # production build into build/
 Build outputs to `build/` directory: `main.js`, `manifest.json`, `styles.css`.
 
 ## Installing in a Vault
-Symlink the `build/` directory contents into the vault's plugin folder:
+Recommended: symlink `build/` as the plugin directory:
 ```bash
-VAULT="/path/to/vault"
-mkdir -p "$VAULT/.obsidian/plugins/at-symbol-inserter"
-ln -sf "$(pwd)/build/main.js" "$VAULT/.obsidian/plugins/at-symbol-inserter/main.js"
-ln -sf "$(pwd)/build/manifest.json" "$VAULT/.obsidian/plugins/at-symbol-inserter/manifest.json"
-ln -sf "$(pwd)/build/styles.css" "$VAULT/.obsidian/plugins/at-symbol-inserter/styles.css"
+ln -s /path/to/obisdian-at-plugin/build \
+   "/path/to/vault/.obsidian/plugins/at-symbol-inserter"
 ```
+
+Or copy files from a [release](https://github.com/NikolasSumrak/obisdian-at-plugin/releases/latest).
+
+## Releasing
+1. Update version in `manifest.json` and `versions.json`
+2. Create GitHub release with tag matching the version (e.g., `1.0.0`)
+3. Attach `build/main.js`, `build/manifest.json`, `build/styles.css` as release assets
 
 ## CSS Classes
 - `.at-date-suggestion` — suggestion row (flex container)
 - `.at-date-label` — option name (e.g., "Today")
-- `.at-date-value` — date preview badge with muted background
-- `.at-date-highlight` — inline date pill in editor (rounded, bordered)
+- `.at-date-value` — date preview badge in popup
+- `.at-date-highlight` — date pill in editor (rounded, bordered, clickable)
+- `.at-date-picker-popup` — floating date picker container
 
 ## Conventions
-- Date format: `YYYY-MM-DD`
-- All CSS uses Obsidian theme variables (`var(--background-secondary)`, `var(--text-muted)`, etc.)
+- Inserted date format: always `YYYY-MM-DD`
+- Display format: configurable via settings, supports tokens (YYYY, MM, DD, MMM, MMMM, ddd, dddd)
+- All CSS uses Obsidian theme variables
 - Plugin class: `AtInserterPlugin` (exported default)
-- Trigger symbol configurable via settings tab (default: `@`)
 
 ## Future Expansion
 The `@` context menu will support additional insertion types beyond dates. Keep the architecture modular so new suggestion providers can be added easily.
